@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabuleiro 2.0</title>
+<meta name="description" content="Jogo de tabuleiro com casas especiais: Sorte, Prisão, Surpresa, Reversa, Azar, Joga de Novo e Derrota.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --fundo: #EFE8DA;
+    --painel: #FBF8F1;
+    --borda: #DDD3C0;
+    --texto: #2B2620;
+    --suave: #7A7064;
+    --destaque: #1F5C4A;
+    --destaque-claro: #2C7A63;
+    --ouro: #D9A637;
+    --caminho: #D8CDB8;
+    --raio: 18px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--texto);
+    font-family: "Rubik", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .app { max-width: 1440px; margin: 0 auto; padding: 20px 24px 24px; }
+  header.topo { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  header.topo h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+  header.topo p { margin: 0; color: var(--suave); }
+
+  .cartao {
+    background: var(--painel);
+    border: 1px solid var(--borda);
+    border-radius: var(--raio);
+    padding: 16px 18px;
+  }
+  .cartao h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; }
+  .cartao h3 { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+
+  .botao {
+    border: 0; border-radius: 12px; cursor: pointer;
+    padding: 10px 16px; font-weight: 700; font-size: 14px;
+    background: #E6DDCB; color: var(--texto);
+    transition: background .15s, transform .05s;
+  }
+  .botao:hover { background: #DCD1BC; }
+  .botao:active { transform: translateY(1px); }
+  .botao:focus-visible { outline: 3px solid var(--destaque-claro); outline-offset: 2px; }
+  .botao.primario { background: var(--destaque); color: #fff; }
+  .botao.primario:hover { background: var(--destaque-claro); }
+  .botao.grande { font-size: 17px; padding: 14px 18px; width: 100%; }
+  .botao:disabled { background: #CFC7B8; color: #8C8478; cursor: default; transform: none; }
+
+  /* ------------------------------------------------ layouts */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 370px; gap: 18px; align-items: start; }
+  .coluna { display: flex; flex-direction: column; gap: 14px; }
+  @media (max-width: 900px) {
+    .app { padding: 14px 12px 20px; }
+    .layout { grid-template-columns: 1fr; }
+    header.topo h1 { font-size: 24px; }
+  }
+
+  .barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .barra label { font-weight: 700; }
+  .barra input[type=number] {
+    width: 74px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--borda); background: #fff;
+  }
+  .dica { color: var(--suave); font-size: 13px; font-style: italic; margin: 4px 0 8px; }
+
+  /* ------------------------------------------------ tabuleiro */
+  .tabuleiro { position: relative; width: 100%; margin: 0 auto; user-select: none; }
+  .tabuleiro svg.caminho { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .casa {
+    position: absolute; border-radius: 18%;
+    display: flex; flex-direction: column; justify-content: space-between;
+    background: var(--c-fundo, #FFFDF8);
+    color: var(--c-texto, #6B6255);
+    border: 1.5px solid var(--c-borda, var(--borda));
+    box-shadow: 0 3px 0 rgba(0,0,0,.08);
+    transition: background .2s, border-color .2s;
+  }
+  .casa .num { font-weight: 700; line-height: 1; }
+  .casa .rot { font-weight: 700; text-align: center; line-height: 1; white-space: nowrap; overflow: hidden; letter-spacing: .2px; }
+  .casa.inicio, .casa.chegada { border: 3px solid var(--ouro); }
+  .casa.inicio .rot, .casa.chegada .rot { color: #8A6514; }
+  .tabuleiro.editavel .casa { cursor: pointer; }
+  .tabuleiro.editavel .casa:hover { border-color: var(--destaque); border-width: 3px; }
+
+  .t-simples   { --c-fundo:#FFFDF8; --c-texto:#6B6255; --c-borda:#DDD3C0; }
+  .t-sorte     { --c-fundo:#95D59A; --c-texto:#1E4A22; --c-borda:#6FB474; }
+  .t-prisao    { --c-fundo:#B4AEA4; --c-texto:#2B2925; --c-borda:#8F897F; }
+  .t-surpresa  { --c-fundo:#C9B0F2; --c-texto:#3D2470; --c-borda:#A086D4; }
+  .t-reversa   { --c-fundo:#F7C873; --c-texto:#5E3B00; --c-borda:#D9A54C; }
+  .t-azar      { --c-fundo:#F29A7E; --c-texto:#5C1A07; --c-borda:#D07558; }
+  .t-de-novo   { --c-fundo:#8ACDE8; --c-texto:#0C3F55; --c-borda:#62AFCF; }
+  .t-derrota   { --c-fundo:#34302B; --c-texto:#F4EFE6; --c-borda:#1E1B18; }
+
+  .peao {
+    position: absolute; left: 0; top: 0;
+    border-radius: 50%; border: 2.5px solid #fff;
+    display: grid; place-items: center;
+    color: #fff; font-weight: 800;
+    box-shadow: 0 3px 4px rgba(0,0,0,.25);
+    transition: transform .13s ease-out, opacity .3s;
+    pointer-events: none;
+  }
+  .peao.vez { box-shadow: 0 0 0 6px color-mix(in srgb, var(--cor) 30%, transparent), 0 3px 4px rgba(0,0,0,.25); }
+  .peao.fora { opacity: .35; }
+  .peao.fora::after {
+    content: "×"; position: absolute; color: #2B2620; font-size: 1.6em; font-weight: 800;
+  }
+
+  .legenda { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 10px; color: var(--suave); font-size: 12px; }
+  .legenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .legenda i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #BDB2A0; background: var(--c-fundo); display: inline-block; }
+
+  /* menu de tipos de casa */
+  .menu {
+    position: fixed; z-index: 20; min-width: 260px;
+    background: #fff; border: 1px solid var(--borda); border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.18); padding: 6px;
+  }
+  .menu .titulo { font-weight: 700; padding: 8px 10px 6px; }
+  .menu button {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: 0; text-align: left; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  }
+  .menu button:hover, .menu button:focus-visible { background: #F3EEE4; outline: none; }
+  .menu button.atual { font-weight: 700; }
+  .menu button i { width: 16px; height: 16px; border-radius: 4px; background: var(--c-fundo); border: 1px solid #BDB2A0; flex: none; }
+  .menu button small { color: var(--suave); }
+
+  /* ------------------------------------------------ jogadores (config) */
+  .jogador-linha { display: grid; grid-template-columns: 20px 1fr 118px 38px; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .jogador-linha .bolinha { width: 18px; height: 18px; border-radius: 50%; }
+  .jogador-linha input, .jogador-linha select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 10px; background: #fff; min-width: 0;
+  }
+  .jogador-linha .remover { padding: 7px 0; font-size: 18px; line-height: 1; }
+  .regras { color: var(--suave); font-size: 13px; line-height: 1.55; margin: 14px 0 0; padding-left: 18px; }
+  .debug { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 16px 0 12px; cursor: pointer; }
+  .debug input { width: 16px; height: 16px; accent-color: var(--destaque); }
+
+  /* ------------------------------------------------ jogo */
+  .vez-rodada { font-size: 12px; font-weight: 700; letter-spacing: .8px; color: var(--suave); }
+  .vez-nome { display: flex; align-items: center; gap: 9px; font-size: 21px; font-weight: 700; margin-top: 4px; }
+  .vez-nome .bolinha { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+  .vez-info { color: var(--suave); font-size: 13px; margin-top: 3px; }
+
+  .dados { display: flex; justify-content: center; gap: 18px; margin: 16px 0; }
+  .dado {
+    width: 64px; height: 64px; background: #fff; border-radius: 14px;
+    border: 1.5px solid #C9BEA9; box-shadow: 0 4px 0 rgba(0,0,0,.08);
+    display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 9px;
+    transition: transform .06s;
+  }
+  .dado:first-child { transform: rotate(-6deg); }
+  .dado:last-child { transform: rotate(5deg); }
+  .dado.vazio { background: #F3EEE4; place-items: center; display: grid; grid-template: 1fr / 1fr; color: var(--suave); font-size: 28px; font-weight: 800; }
+  .dado .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--texto); align-self: center; justify-self: center; }
+  .dado.um .pip { background: #C23B3B; width: 13px; height: 13px; }
+
+  .acoes { display: flex; gap: 8px; align-items: center; }
+  .acoes .debug-campo { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #A0522D; white-space: nowrap; }
+  .acoes .debug-campo input { width: 64px; padding: 10px 8px; border-radius: 10px; border: 1px solid var(--borda); }
+
+  .placar { display: flex; flex-direction: column; gap: 4px; }
+  .placar-item { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 10px; }
+  .placar-item.vez { background: #EFE7D6; }
+  .placar-item .bolinha { width: 22px; height: 22px; border-radius: 50%; }
+  .placar-item .nome { font-weight: 700; font-size: 14px; }
+  .placar-item .nome small { font-weight: 400; color: var(--suave); }
+  .placar-item .info { color: var(--suave); font-size: 12px; }
+  .selo { font-size: 10.5px; font-weight: 700; color: #fff; padding: 3px 8px; border-radius: 6px; letter-spacing: .4px; }
+
+  .historico {
+    height: 210px; overflow-y: auto; background: #fff; border: 1px solid var(--borda); border-radius: 10px;
+    padding: 8px 10px; font-size: 12.5px; line-height: 1.5; margin: 0; list-style: none;
+  }
+  .historico li.regra { padding-left: 12px; color: #5A5246; }
+  .historico li.sistema { color: var(--suave); font-style: italic; }
+  .historico li.vitoria { font-weight: 800; color: var(--destaque); }
+  .historico li + li.jogada { margin-top: 4px; }
+  .rodape-jogo { margin-top: 10px; }
+  .rodape-jogo .botao { width: 100%; }
+
+  /* modal de fim */
+  .fundo-modal { position: fixed; inset: 0; background: rgba(43,38,32,.45); display: grid; place-items: center; z-index: 30; padding: 16px; }
+  .modal { background: var(--painel); border-radius: 20px; padding: 24px 26px; width: min(420px, 100%); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+  .modal h2 { margin: 0 0 4px; font-size: 26px; }
+  .modal p { margin: 0 0 14px; color: var(--suave); }
+  .modal ol { margin: 0 0 18px; padding-left: 22px; line-height: 1.7; }
+  .modal .botoes { display: flex; gap: 8px; }
+  .modal .botoes .botao { flex: 1; }
+
+  footer { text-align: center; color: var(--suave); font-size: 12px; margin-top: 18px; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topo">
+    <h1>Tabuleiro 2.0</h1>
+    <p id="subtitulo">Monte o tabuleiro, escolha os jogadores e comece a partida.</p>
+  </header>
+
+  <!-- ================================================= CONFIGURAÇÃO -->
+  <main id="tela-config" class="layout">
+    <section class="cartao">
+      <div class="barra">
+        <label for="qtd-casas">Casas no tabuleiro:</label>
+        <input id="qtd-casas" type="number" min="5" max="120" value="30">
+        <button class="botao" id="btn-sortear">Sortear casas especiais</button>
+        <button class="botao" id="btn-limpar">Deixar todas simples</button>
+      </div>
+      <p class="dica">Clique em uma casa para escolher o tipo dela.</p>
+      <div id="tab-config" class="tabuleiro editavel"></div>
+      <div class="legenda" id="legenda-config"></div>
+    </section>
+
+    <section class="cartao">
+      <h2>Jogadores</h2>
+      <div id="lista-jogadores"></div>
+      <button class="botao" id="btn-add">+ Adicionar jogador</button>
+      <ul class="regras">
+        <li><b>Normal:</b> anda a soma dos dois dados.</li>
+        <li><b>Sortudo:</b> nunca anda menos de 7; acima disso, +1.</li>
+        <li><b>Azarado:</b> -1 na soma e não ganha nas casas de Sorte.</li>
+        <li>Dados iguais: joga de novo. Vence quem chegar à última casa.</li>
+      </ul>
+      <label class="debug"><input type="checkbox" id="chk-debug"> Modo DEBUG (escolher a casa em vez de jogar os dados)</label>
+      <button class="botao primario grande" id="btn-comecar">Começar jogo</button>
+    </section>
+  </main>
+
+  <!-- ================================================= JOGO -->
+  <main id="tela-jogo" class="layout" hidden>
+    <section class="cartao">
+      <div id="tab-jogo" class="tabuleiro"></div>
+      <div class="legenda" id="legenda-jogo"></div>
+    </section>
+
+    <div class="coluna">
+      <section class="cartao">
+        <div class="vez-rodada" id="vez-rodada">RODADA 1</div>
+        <div class="vez-nome" id="vez-nome"></div>
+        <div class="vez-info" id="vez-info"></div>
+        <div class="dados" id="dados"></div>
+        <div class="acoes">
+          <label class="debug-campo" id="debug-campo" hidden>DEBUG · casa <input type="number" id="debug-destino" min="0" value="0"></label>
+          <button class="botao primario grande" id="btn-jogar">Jogar dados</button>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h3>Placar</h3>
+        <div class="placar" id="placar"></div>
+      </section>
+
+      <section class="cartao">
+        <h3>Histórico</h3>
+        <ul class="historico" id="historico" aria-live="polite"></ul>
+        <div class="rodape-jogo"><button class="botao" id="btn-novo">Novo jogo</button></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>Versão web do <a href="https://github.com/Davifonteles/Tabuleiro-2.0">Tabuleiro 2.0</a> · as mesmas regras do código em Java</footer>
+</div>
+
+<div id="modal" class="fundo-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <h2 id="modal-titulo"></h2>
+    <p id="modal-sub"></p>
+    <ol id="modal-lista"></ol>
+    <div class="botoes">
+      <button class="botao" id="modal-ver">Ver tabuleiro</button>
+      <button class="botao primario" id="modal-novo">Jogar de novo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   Dados do jogo (equivalentes às classes Java)
+   ===================================================================== */
+
+// Mesmos códigos da FabricaCasa: 0 Simples, 1 Sorte, 2 Prisão, 3 Surpresa, 4 Reversa, 5 Azar, 6 Joga de novo, 7 Derrota
+const TIPOS = [
+  { classe: "t-simples",  nome: "Simples",      rotulo: "",         desc: "Ganha 1 moeda" },
+  { classe: "t-sorte",    nome: "Sorte",        rotulo: "SORTE",    desc: "Avança 3 casas (azarados não)" },
+  { classe: "t-prisao",   nome: "Prisão",       rotulo: "PRISÃO",   desc: "Perde a próxima rodada" },
+  { classe: "t-surpresa", nome: "Surpresa",     rotulo: "SURPRESA", desc: "Anda de -3 a +3 casas" },
+  { classe: "t-reversa",  nome: "Reversa",      rotulo: "REVERSA",  desc: "Inverte a direção" },
+  { classe: "t-azar",     nome: "Azar",         rotulo: "AZAR",     desc: "Volta 2 casas" },
+  { classe: "t-de-novo",  nome: "Joga de novo", rotulo: "DE NOVO",  desc: "Ganha uma jogada extra" },
+  { classe: "t-derrota",  nome: "Derrota",      rotulo: "DERROTA",  desc: "Eliminado do jogo" },
+];
+const TIPOS_JOGADOR = ["Normal", "Sortudo", "Azarado"];
+const CORES = ["#D64545", "#2F6FD6", "#2E9E5B", "#E08A1E", "#8A4FD0", "#1BA3A3"];
+const MAX_JOGADORES = 6;
+
+const dado = () => Math.floor(Math.random() * 6) + 1;
+
+// JogadorNormal / JogadorSortudo / JogadorAzarado .jogarDados()
+function jogarDados(tipo) {
+  const d1 = dado(), d2 = dado(), bruto = d1 + d2;
+  let soma = bruto, detalhe = "";
+  if (tipo === 1) {            // Sortudo
+    soma = bruto < 7 ? 7 : bruto + 1;
+    detalhe = bruto < 7 ? ", sortudo: ajustado para 7" : `, sortudo: +1 = ${soma}`;
+  } else if (tipo === 2) {     // Azarado
+    soma = Math.max(2, bruto - 1);
+    detalhe = `, azarado: -1 = ${soma}`;
+  }
+  return { d1, d2, bruto, soma, detalhe };
+}
+
+// Estratégias das casas (EstrategiaSimples, EstrategiaSorte, ...)
+const ESTRATEGIAS = [
+  (j) => { j.moedas++; return `${j.nome} caiu numa casa simples e ganhou 1 moeda!`; },
+  (j) => {
+    if (j.tipo !== 2) { j.pos += 3; return `${j.nome} teve sorte e andou 3 casas!`; }
+    return `${j.nome} é azarado e não teve sorte.`;
+  },
+  (j) => { j.pularRodada = true; return `${j.nome} foi preso e perderá a próxima rodada!`; },
+  (j) => {
+    const v = Math.floor(Math.random() * 7) - 3;
+    j.pos += v;
+    if (v > 0) return `${j.nome} teve uma surpresa positiva e avançou ${v} casas!`;
+    if (v < 0) return `${j.nome} teve uma surpresa negativa e voltou ${-v} casas!`;
+    return `${j.nome} teve uma surpresa neutra e ficou na mesma posição!`;
+  },
+  (j) => { j.reverso = !j.reverso; return `${j.nome} teve a direção invertida! Agora ele anda para trás.`; },
+  (j) => { j.pos = Math.max(0, j.pos - 2); return `${j.nome} teve azar e voltou 2 casas.`; },
+  (j) => { j.temNovaJogada = true; return `${j.nome} ganhou uma nova jogada!`; },
+  (j) => { j.derrotado = true; return `${j.nome} caiu em uma casa de DERROTA e está fora do jogo!`; },
+];
+
+/* =====================================================================
+   Motor: uma jogada por clique (igual ao MotorJogo.java)
+   ===================================================================== */
+class Motor {
+  constructor(casas, jogadores, registrar) {
+    this.casas = casas;
+    this.jogadores = jogadores.map((p, i) => ({
+      nome: p.nome, tipo: p.tipo, cor: CORES[i],
+      pos: 0, moedas: 0, jogadas: 0,
+      derrotado: false, reverso: false, preso: false,
+      pularRodada: false, temNovaJogada: false,
+    }));
+    this.registrar = registrar;
+    this.vez = 0;
+    this.rodada = 1;
+    this.terminado = false;
+    this.vencedor = null;
+    this.prepararVez();
+  }
+  get ultima() { return this.casas.length - 1; }
+  get daVez() { return this.terminado ? null : this.jogadores[this.vez]; }
+
+  jogar(destinoDebug) {
+    if (this.terminado) return null;
+    const j = this.jogadores[this.vez];
+    const r = { jogador: j, dados: null };
+    let passos, iguais = false;
+
+    if (destinoDebug != null) {
+      passos = destinoDebug - j.pos;
+      this.registrar(`[DEBUG] ${j.nome} foi colocado na casa ${destinoDebug}.`, "jogada");
+    } else {
+      const d = jogarDados(j.tipo);
+      r.dados = d;
+      iguais = d.d1 === d.d2;
+      this.registrar(`${j.nome} tirou ${d.d1} e ${d.d2} (total ${d.bruto}${d.detalhe})`, "jogada");
+      passos = j.reverso ? -d.soma : d.soma;
+      if (j.reverso) this.registrar(`${j.nome} está na direção reversa e anda ${d.soma} casas para trás.`, "regra");
+    }
+
+    j.pos = Math.max(0, j.pos + passos);
+    j.jogadas++;
+    j.temNovaJogada = false;
+    j.pularRodada = false;
+
+    if (j.pos < this.casas.length) {
+      const tipo = this.casas[j.pos];
+      this.registrar(`${j.nome} caiu na casa ${j.pos} (${TIPOS[tipo].nome}).`, "regra");
+      this.registrar(ESTRATEGIAS[tipo](j), "regra");
+    }
+    j.pos = Math.max(0, j.pos);
+
+    if (j.reverso && j.pos === 0 && !j.derrotado) {
+      j.reverso = false;
+      this.registrar(`${j.nome} voltou ao início e retoma a direção normal.`, "regra");
+    }
+    if (j.pularRodada) { j.preso = true; j.pularRodada = false; }
+
+    const extra = !j.derrotado && (iguais || j.temNovaJogada);
+    if (iguais && !j.derrotado) this.registrar(`Dados iguais! ${j.nome} joga de novo.`, "regra");
+    j.temNovaJogada = false;
+
+    if (j.pos >= this.ultima) {
+      this.vencedor = j;
+      this.terminado = true;
+      this.registrar(`${j.nome} chegou à última casa e VENCEU o jogo!`, "vitoria");
+    } else if (this.jogadores.every(x => x.derrotado)) {
+      this.terminado = true;
+      this.registrar("Todos os jogadores foram eliminados. Ninguém venceu.", "sistema");
+    } else if (!extra) {
+      this.avancarVez();
+      this.prepararVez();
+    }
+    return r;
+  }
+
+  avancarVez() {
+    this.vez = (this.vez + 1) % this.jogadores.length;
+    if (this.vez === 0) this.rodada++;
+  }
+
+  prepararVez() {
+    const limite = this.jogadores.length * 2 + 1;
+    for (let i = 0; i < limite; i++) {
+      const j = this.jogadores[this.vez];
+      if (j.derrotado) this.avancarVez();
+      else if (j.preso) {
+        j.preso = false;
+        this.registrar(`${j.nome} está preso e perde esta rodada.`, "sistema");
+        this.avancarVez();
+      } else return;
+    }
+    this.terminado = true;
+    this.registrar("Todos os jogadores foram eliminados. Ninguém venceu.", "sistema");
+  }
+}
+
+/* =====================================================================
+   Desenho do tabuleiro (zigue-zague) e dos peões
+   ===================================================================== */
+class Tabuleiro {
+  constructor(el, aoClicar) {
+    this.el = el;
+    this.aoClicar = aoClicar;
+    this.casas = [];
+    this.jogadores = [];
+    this.exibida = [];
+    this.vez = null;
+    this.geo = null;
+    this.peoes = [];
+    new ResizeObserver(() => this.desenhar()).observe(el);
+  }
+
+  setCasas(casas) { this.casas = casas; this.desenhar(); }
+
+  setJogadores(jogadores) {
+    this.jogadores = jogadores;
+    this.exibida = jogadores.map(j => j.pos);
+    this.desenhar();
+  }
+
+  geometria() {
+    const n = Math.max(1, this.casas.length);
+    const larg = Math.max(200, this.el.clientWidth);
+    const estreito = window.innerWidth <= 900;
+    let cols, tam;
+    if (estreito) {
+      // celular: largura manda; o tabuleiro pode crescer para baixo
+      cols = Math.min(n, Math.max(4, Math.min(8, Math.round(larg / 68))));
+      tam = Math.floor(Math.min(110, larg / cols));
+    } else {
+      const alt = Math.max(420, window.innerHeight - 190);
+      let melhor = 0;
+      cols = Math.min(n, 3);
+      for (let c = 3; c <= Math.min(n, 16); c++) {
+        const t = Math.min(larg / c, alt / Math.ceil(n / c));
+        if (t > melhor + 0.5) { melhor = t; cols = c; }
+      }
+      tam = Math.floor(Math.min(130, larg / cols, alt / Math.ceil(n / cols)));
+    }
+    const linhas = Math.ceil(n / cols);
+    return { cols, linhas, tam, x0: Math.floor((larg - cols * tam) / 2) };
+  }
+
+  centro(i) {
+    const { cols, tam, x0 } = this.geo;
+    const linha = Math.floor(i / cols);
+    let col = i % cols;
+    if (linha % 2 === 1) col = cols - 1 - col;
+    return { x: x0 + col * tam + tam / 2, y: linha * tam + tam / 2, linha, col };
+  }
+
+  desenhar() {
+    if (!this.casas.length) return;
+    this.geo = this.geometria();
+    const { linhas, tam } = this.geo;
+    const folga = Math.max(3, Math.round(tam / 16));
+    this.el.style.height = (linhas * tam) + "px";
+    this.el.innerHTML = "";
+
+    // caminho que liga as casas
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "caminho");
+    svg.setAttribute("width", this.el.clientWidth);
+    svg.setAttribute("height", linhas * tam);
+    const pontos = this.casas.map((_, i) => { const c = this.centro(i); return `${c.x},${c.y}`; }).join(" ");
+    const linha = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    linha.setAttribute("points", pontos);
+    linha.setAttribute("fill", "none");
+    linha.setAttribute("stroke", "var(--caminho)");
+    linha.setAttribute("stroke-width", Math.round(tam * 0.22));
+    linha.setAttribute("stroke-linecap", "round");
+    linha.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(linha);
+    this.el.appendChild(svg);
+
+    const ultima = this.casas.length - 1;
+    this.casas.forEach((tipo, i) => {
+      const c = this.centro(i);
+      const t = TIPOS[tipo];
+      const div = document.createElement("div");
+      div.className = `casa ${t.classe}` + (i === 0 ? " inicio" : "") + (i === ultima ? " chegada" : "");
+      div.style.left = (c.x - tam / 2 + folga) + "px";
+      div.style.top = (c.y - tam / 2 + folga) + "px";
+      div.style.width = div.style.height = (tam - folga * 2) + "px";
+      div.style.padding = `${Math.round(tam * 0.08)}px ${Math.round(tam * 0.09)}px`;
+      div.title = `Casa ${i}${i === 0 ? " · Início" : i === ultima ? " · Chegada" : ""}\n${t.nome}: ${t.desc}`;
+      const rotulo = i === 0 ? "INÍCIO" : i === ultima ? "CHEGADA" : t.rotulo;
+      div.innerHTML = `<span class="num" style="font-size:${Math.max(11, tam * 0.2)}px">${i}</span>` +
+        (rotulo && tam >= 40 ? `<span class="rot" style="font-size:${Math.max(8, tam * 0.115)}px">${rotulo}</span>` : "");
+      if (this.aoClicar) {
+        div.tabIndex = 0;
+        div.setAttribute("role", "button");
+        div.setAttribute("aria-label", `Casa ${i}, ${t.nome}. Mudar tipo`);
+        div.addEventListener("click", () => this.aoClicar(i, div));
+        div.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.aoClicar(i, div); } });
+      }
+      this.el.appendChild(div);
+    });
+
+    this.peoes = this.jogadores.map(j => {
+      const p = document.createElement("div");
+      p.className = "peao";
+      p.style.background = j.cor;
+      p.style.setProperty("--cor", j.cor);
+      p.textContent = (j.nome.trim()[0] || "?").toUpperCase();
+      this.el.appendChild(p);
+      return p;
+    });
+    this.posicionarPeoes();
+  }
+
+  posicionarPeoes() {
+    if (!this.geo || !this.peoes.length) return;
+    const { tam } = this.geo;
+    const ultima = this.casas.length - 1;
+    const grupos = {};
+    this.jogadores.forEach((j, k) => {
+      const pos = Math.min(Math.max(this.exibida[k], 0), ultima);
+      (grupos[pos] ||= []).push(k);
+    });
+    for (const [pos, lista] of Object.entries(grupos)) {
+      const c = this.centro(+pos);
+      lista.forEach((k, idx) => {
+        const qtd = lista.length;
+        let raio = Math.max(8, tam * 0.15);
+        if (qtd > 2) raio *= 0.85;
+        let x = c.x, y = c.y - tam * 0.04;
+        if (qtd > 1) {
+          const ang = -Math.PI / 2 + idx * 2 * Math.PI / qtd;
+          x += Math.cos(ang) * tam * 0.2;
+          y += Math.sin(ang) * tam * 0.2;
+        }
+        const p = this.peoes[k], j = this.jogadores[k];
+        p.style.width = p.style.height = (raio * 2) + "px";
+        p.style.fontSize = (raio * 1.05) + "px";
+        p.style.transform = `translate(${x - raio}px, ${y - raio}px)`;
+        p.classList.toggle("vez", j === this.vez);
+        p.classList.toggle("fora", j.derrotado);
+        p.style.zIndex = j === this.vez ? 3 : 2;
+      });
+    }
+  }
+
+  setVez(j) { this.vez = j; this.posicionarPeoes(); }
+
+  // anda com os peões casa a casa até a posição real
+  animar() {
+    return new Promise(resolve => {
+      const ultima = this.casas.length - 1;
+      const passo = () => {
+        let mexeu = false;
+        this.jogadores.forEach((j, k) => {
+          const alvo = Math.min(Math.max(j.pos, 0), ultima);
+          const atual = this.exibida[k];
+          if (atual !== alvo) {
+            const d = Math.max(1, Math.floor(Math.abs(alvo - atual) / 10));
+            this.exibida[k] = atual + Math.sign(alvo - atual) * d;
+            mexeu = true;
+          }
+        });
+        this.posicionarPeoes();
+        if (mexeu) setTimeout(passo, 140); else resolve();
+      };
+      passo();
+    });
+  }
+}
+
+/* =====================================================================
+   Elementos auxiliares
+   ===================================================================== */
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function preencherLegenda(el) {
+  el.innerHTML = TIPOS.map(t => `<span class="${t.classe}" title="${t.desc}"><i></i>${t.nome}</span>`).join("");
+}
+
+function desenharDados(d1, d2) {
+  const face = (v) => {
+    if (!v) return `<div class="dado vazio">?</div>`;
+    const pos = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[v];
+    let html = "";
+    for (let i = 1; i <= 9; i++) html += pos.includes(i) ? `<span class="pip"></span>` : `<span></span>`;
+    return `<div class="dado${v === 1 ? " um" : ""}" aria-label="dado ${v}">${html}</div>`;
+  };
+  $("#dados").innerHTML = face(d1) + face(d2);
+}
+
+function rolarDados(d1, d2) {
+  return new Promise(resolve => {
+    let n = 0;
+    const t = setInterval(() => {
+      if (++n < 8) desenharDados(dado(), dado());
+      else { clearInterval(t); desenharDados(d1, d2); resolve(); }
+    }, 60);
+  });
+}
+
+/* =====================================================================
+   Tela de configuração
+   ===================================================================== */
+const config = carregarConfig() || {
+  casas: sortear(30),
+  jogadores: [{ nome: "Jogador 1", tipo: 0 }, { nome: "Jogador 2", tipo: 0 }],
+  debug: false,
+};
+
+function carregarConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem("tabuleiro2-config"));
+    if (c && Array.isArray(c.casas) && c.casas.length >= 5 && Array.isArray(c.jogadores) && c.jogadores.length) return c;
+  } catch (e) { /* sem armazenamento */ }
+  return null;
+}
+function salvarConfig() {
+  try { localStorage.setItem("tabuleiro2-config", JSON.stringify(config)); } catch (e) { /* ignora */ }
+}
+
+function sortear(n) {
+  const casas = [];
+  for (let i = 0; i < n; i++) {
+    let t = 0;
+    if (i > 0 && i < n - 1 && Math.random() < 0.32) t = Math.random() < 0.1 ? 7 : 1 + Math.floor(Math.random() * 6);
+    casas.push(t);
+  }
+  return casas;
+}
+
+const tabConfig = new Tabuleiro($("#tab-config"), abrirMenuCasa);
+preencherLegenda($("#legenda-config"));
+preencherLegenda($("#legenda-jogo"));
+
+function renderConfig() {
+  $("#qtd-casas").value = config.casas.length;
+  $("#chk-debug").checked = config.debug;
+  tabConfig.setCasas(config.casas);
+  renderJogadoresConfig();
+}
+
+function renderJogadoresConfig() {
+  const lista = $("#lista-jogadores");
+  lista.innerHTML = "";
+  config.jogadores.forEach((p, i) => {
+    const linha = document.createElement("div");
+    linha.className = "jogador-linha";
+    linha.innerHTML = `
+      <span class="bolinha" style="background:${CORES[i]}"></span>
+      <input type="text" maxlength="20" value="${esc(p.nome)}" aria-label="Nome do jogador ${i + 1}">
+      <select aria-label="Tipo do jogador ${i + 1}">${TIPOS_JOGADOR.map((t, k) => `<option value="${k}"${k === p.tipo ? " selected" : ""}>${t}</option>`).join("")}</select>
+      <button class="botao remover" title="Remover jogador" aria-label="Remover jogador ${i + 1}"${config.jogadores.length <= 1 ? " disabled" : ""}>×</button>`;
+    linha.querySelector("input").addEventListener("input", e => { p.nome = e.target.value; salvarConfig(); });
+    linha.querySelector("select").addEventListener("change", e => { p.tipo = +e.target.value; salvarConfig(); });
+    linha.querySelector(".remover").addEventListener("click", () => {
+      config.jogadores.splice(i, 1);
+      salvarConfig();
+      renderJogadoresConfig();
+    });
+    lista.appendChild(linha);
+  });
+  $("#btn-add").disabled = config.jogadores.length >= MAX_JOGADORES;
+}
+
+$("#btn-add").addEventListener("click", () => {
+  if (config.jogadores.length >= MAX_JOGADORES) return;
+  config.jogadores.push({ nome: `Jogador ${config.jogadores.length + 1}`, tipo: 0 });
+  salvarConfig();
+  renderJogadoresConfig();
+  $("#lista-jogadores").lastElementChild.querySelector("input").select();
+});
+
+$("#qtd-casas").addEventListener("change", e => {
+  let n = Math.round(+e.target.value) || 30;
+  n = Math.min(120, Math.max(5, n));
+  e.target.value = n;
+  while (config.casas.length > n) config.casas.pop();
+  while (config.casas.length < n) config.casas.push(0);
+  salvarConfig();
+  tabConfig.setCasas(config.casas);
+});
+$("#btn-sortear").addEventListener("click", () => { config.casas = sortear(config.casas.length); salvarConfig(); tabConfig.setCasas(config.casas); });
+$("#btn-limpar").addEventListener("click", () => { config.casas = config.casas.map(() => 0); salvarConfig(); tabConfig.setCasas(config.casas); });
+$("#chk-debug").addEventListener("change", e => { config.debug = e.target.checked; salvarConfig(); });
+
+let menuAberto = null;
+function fecharMenu() { if (menuAberto) { menuAberto.remove(); menuAberto = null; } }
+function abrirMenuCasa(i, casaEl) {
+  fecharMenu();
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  menu.setAttribute("role", "menu");
+  menu.innerHTML = `<div class="titulo">Casa ${i}</div>` + TIPOS.map((t, k) =>
+    `<button role="menuitem" class="${t.classe}${config.casas[i] === k ? " atual" : ""}" data-tipo="${k}"><i></i><span>${t.nome}<br><small>${t.desc}</small></span></button>`).join("");
+  document.body.appendChild(menu);
+  const r = casaEl.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let x = r.right + 8, y = r.top;
+  if (x + mw > window.innerWidth - 8) x = r.left - mw - 8;
+  if (x < 8) x = Math.max(8, (window.innerWidth - mw) / 2);
+  if (y + mh > window.innerHeight - 8) y = Math.max(8, window.innerHeight - mh - 8);
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    config.casas[i] = +b.dataset.tipo;
+    salvarConfig();
+    fecharMenu();
+    tabConfig.setCasas(config.casas);
+  });
+  menuAberto = menu;
+  (menu.querySelector(".atual") || menu.querySelector("button")).focus();
+}
+document.addEventListener("mousedown", e => { if (menuAberto && !menuAberto.contains(e.target)) fecharMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") fecharMenu(); });
+window.addEventListener("scroll", fecharMenu, { passive: true });
+
+/* =====================================================================
+   Tela do jogo
+   ===================================================================== */
+let motor = null;
+let ocupado = false;
+const tabJogo = new Tabuleiro($("#tab-jogo"), null);
+
+$("#btn-comecar").addEventListener("click", () => {
+  const nomes = new Set();
+  for (const p of config.jogadores) {
+    p.nome = p.nome.trim();
+    if (!p.nome) { alert("Todos os jogadores precisam de um nome."); return; }
+    if (nomes.has(p.nome.toLowerCase())) { alert(`Já existe um jogador chamado "${p.nome}". Use nomes diferentes.`); return; }
+    nomes.add(p.nome.toLowerCase());
+  }
+  salvarConfig();
+  iniciarJogo();
+});
+
+function iniciarJogo() {
+  $("#historico").innerHTML = "";
+  motor = new Motor([...config.casas], config.jogadores, registrar);
+  registrar(`Partida iniciada com ${motor.jogadores.length} jogador(es) e ${motor.casas.length} casas. Vence quem chegar à casa ${motor.ultima}.`, "sistema");
+
+  $("#tela-config").hidden = true;
+  $("#tela-jogo").hidden = false;
+  $("#subtitulo").textContent = "Boa partida!";
+  $("#debug-campo").hidden = !config.debug;
+  $("#debug-destino").max = motor.ultima;
+  $("#btn-jogar").textContent = config.debug ? "Mover" : "Jogar dados";
+  desenharDados(0, 0);
+
+  tabJogo.setCasas(motor.casas);
+  tabJogo.setJogadores(motor.jogadores);
+  atualizarJogo();
+  window.scrollTo({ top: 0 });
+  $("#btn-jogar").focus();
+}
+
+function voltarConfig() {
+  $("#modal").hidden = true;
+  $("#tela-jogo").hidden = true;
+  $("#tela-config").hidden = false;
+  $("#subtitulo").textContent = "Monte o tabuleiro, escolha os jogadores e comece a partida.";
+  motor = null;
+  renderConfig();
+}
+
+function registrar(texto, tipo) {
+  const li = document.createElement("li");
+  li.className = tipo || "";
+  li.textContent = texto;
+  const h = $("#historico");
+  h.appendChild(li);
+  h.scrollTop = h.scrollHeight;
+}
+
+const nomeTipo = (j) => TIPOS_JOGADOR[j.tipo];
+
+function atualizarJogo() {
+  const j = motor.daVez;
+  tabJogo.setVez(j);
+  const btn = $("#btn-jogar");
+  if (motor.terminado) {
+    const v = motor.vencedor;
+    $("#vez-rodada").textContent = "FIM DE JOGO";
+    $("#vez-nome").innerHTML = v ? `<span class="bolinha" style="background:${v.cor}"></span>${esc(v.nome)} venceu!` : "Sem vencedor";
+    $("#vez-info").textContent = v ? `Chegou à casa ${motor.ultima} em ${v.jogadas} jogadas` : "Todos foram eliminados";
+    btn.textContent = "Jogar de novo";
+  } else {
+    $("#vez-rodada").textContent = `RODADA ${motor.rodada}`;
+    $("#vez-nome").innerHTML = `<span class="bolinha" style="background:${j.cor}"></span>Vez de ${esc(j.nome)}`;
+    $("#vez-info").textContent = `${nomeTipo(j)} · casa ${j.pos}` + (j.reverso ? " · andando para trás" : "");
+    if (config.debug) $("#debug-destino").value = Math.min(j.pos, motor.ultima);
+  }
+  btn.disabled = false;
+
+  $("#placar").innerHTML = motor.jogadores.map(p => {
+    let selo = "";
+    if (p === motor.vencedor) selo = `<span class="selo" style="background:#A9821F">VENCEDOR</span>`;
+    else if (p.derrotado) selo = `<span class="selo" style="background:#34302B">ELIMINADO</span>`;
+    else if (p.preso) selo = `<span class="selo" style="background:#7D776E">PRESO</span>`;
+    else if (p.reverso) selo = `<span class="selo" style="background:#C07F12">REVERSO</span>`;
+    else if (p === j) selo = `<span class="selo" style="background:var(--destaque)">VEZ</span>`;
+    return `<div class="placar-item${p === j ? " vez" : ""}">
+      <span class="bolinha" style="background:${p.cor}"></span>
+      <div><div class="nome">${esc(p.nome)} <small>(${nomeTipo(p)})</small></div>
+      <div class="info">casa ${Math.min(p.pos, motor.ultima)} · ${p.moedas} moedas · ${p.jogadas} jogadas</div></div>
+      ${selo}</div>`;
+  }).join("");
+}
+
+async function jogar() {
+  if (!motor || ocupado) return;
+  if (motor.terminado) { voltarConfig(); return; }
+  ocupado = true;
+  $("#btn-jogar").disabled = true;
+
+  let destino = null;
+  if (config.debug) {
+    destino = Math.min(motor.ultima, Math.max(0, Math.round(+$("#debug-destino").value) || 0));
+  }
+  const r = motor.jogar(destino);
+  if (r && r.dados) await rolarDados(r.dados.d1, r.dados.d2);
+  else desenharDados(0, 0);
+  await tabJogo.animar();
+  atualizarJogo();
+  ocupado = false;
+  if (motor.terminado) mostrarFim();
+  else $("#btn-jogar").focus();
+}
+
+function mostrarFim() {
+  const v = motor.vencedor;
+  $("#modal-titulo").textContent = v ? `${v.nome} venceu!` : "Ninguém venceu";
+  $("#modal-sub").textContent = v ? `Chegou à casa ${motor.ultima} em ${v.jogadas} jogadas.` : "Todos os jogadores foram eliminados.";
+  const ordem = [...motor.jogadores].sort((a, b) =>
+    (b === v) - (a === v) || a.derrotado - b.derrotado || b.pos - a.pos);
+  $("#modal-lista").innerHTML = ordem.map(p =>
+    `<li><b>${esc(p.nome)}</b> (${nomeTipo(p)}): casa ${Math.min(p.pos, motor.ultima)}, ${p.moedas} moedas, ${p.jogadas} jogadas${p.derrotado ? " — eliminado" : ""}</li>`).join("");
+  $("#modal").hidden = false;
+  $("#modal-novo").focus();
+}
+
+$("#btn-jogar").addEventListener("click", jogar);
+$("#btn-novo").addEventListener("click", () => {
+  if (motor && !motor.terminado && !confirm("Abandonar a partida atual e voltar à configuração?")) return;
+  voltarConfig();
+});
+$("#modal-novo").addEventListener("click", voltarConfig);
+$("#modal-ver").addEventListener("click", () => { $("#modal").hidden = true; $("#btn-jogar").focus(); });
+document.addEventListener("keydown", e => {
+  if ($("#tela-jogo").hidden || !$("#modal").hidden) return;
+  if (e.key === " " && !["INPUT", "BUTTON", "SELECT"].includes(document.activeElement.tagName)) {
+    e.preventDefault();
+    jogar();
+  }
+});
+
+renderConfig();
+</script>
+</body>
+</html>
