@@ -204,6 +204,8 @@
   .modal .botoes { display: flex; gap: 8px; }
   .modal .botoes .botao { flex: 1; }
 
+  .erro { color: #A3341F; background: #FBE3DC; border-radius: 10px; padding: 9px 12px; font-size: 13px; margin: 0 0 10px; }
+  @media (prefers-reduced-motion: reduce) { .peao, .casa, .botao { transition: none; } }
   footer { text-align: center; color: var(--suave); font-size: 12px; margin-top: 18px; }
   footer a { color: inherit; }
 </style>
@@ -240,6 +242,7 @@
         <li>Dados iguais: joga de novo. Vence quem chegar à última casa.</li>
       </ul>
       <label class="debug"><input type="checkbox" id="chk-debug"> Modo DEBUG (escolher a casa em vez de jogar os dados)</label>
+      <p class="erro" id="erro-config" role="alert" hidden></p>
       <button class="botao primario grande" id="btn-comecar">Começar jogo</button>
     </section>
   </main>
@@ -287,6 +290,17 @@
     <div class="botoes">
       <button class="botao" id="modal-ver">Ver tabuleiro</button>
       <button class="botao primario" id="modal-novo">Jogar de novo</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-confirma" class="fundo-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirma-titulo">
+    <h2 id="confirma-titulo">Abandonar a partida?</h2>
+    <p>O progresso desta partida será perdido e você volta para a configuração.</p>
+    <div class="botoes">
+      <button class="botao" id="confirma-nao">Continuar jogando</button>
+      <button class="botao primario" id="confirma-sim">Abandonar</button>
     </div>
   </div>
 </div>
@@ -777,12 +791,18 @@ const tabJogo = new Tabuleiro($("#tab-jogo"), null);
 
 $("#btn-comecar").addEventListener("click", () => {
   const nomes = new Set();
+  const erro = $("#erro-config");
   for (const p of config.jogadores) {
     p.nome = p.nome.trim();
-    if (!p.nome) { alert("Todos os jogadores precisam de um nome."); return; }
-    if (nomes.has(p.nome.toLowerCase())) { alert(`Já existe um jogador chamado "${p.nome}". Use nomes diferentes.`); return; }
+    if (!p.nome) { erro.textContent = "Todos os jogadores precisam de um nome."; erro.hidden = false; return; }
+    if (nomes.has(p.nome.toLowerCase())) {
+      erro.textContent = `Já existe um jogador chamado "${p.nome}". Use nomes diferentes.`;
+      erro.hidden = false;
+      return;
+    }
     nomes.add(p.nome.toLowerCase());
   }
+  erro.hidden = true;
   salvarConfig();
   iniciarJogo();
 });
@@ -894,13 +914,15 @@ function mostrarFim() {
 
 $("#btn-jogar").addEventListener("click", jogar);
 $("#btn-novo").addEventListener("click", () => {
-  if (motor && !motor.terminado && !confirm("Abandonar a partida atual e voltar à configuração?")) return;
+  if (motor && !motor.terminado) { $("#modal-confirma").hidden = false; $("#confirma-nao").focus(); return; }
   voltarConfig();
 });
+$("#confirma-nao").addEventListener("click", () => { $("#modal-confirma").hidden = true; $("#btn-jogar").focus(); });
+$("#confirma-sim").addEventListener("click", () => { $("#modal-confirma").hidden = true; voltarConfig(); });
 $("#modal-novo").addEventListener("click", voltarConfig);
 $("#modal-ver").addEventListener("click", () => { $("#modal").hidden = true; $("#btn-jogar").focus(); });
 document.addEventListener("keydown", e => {
-  if ($("#tela-jogo").hidden || !$("#modal").hidden) return;
+  if ($("#tela-jogo").hidden || !$("#modal").hidden || !$("#modal-confirma").hidden) return;
   if (e.key === " " && !["INPUT", "BUTTON", "SELECT"].includes(document.activeElement.tagName)) {
     e.preventDefault();
     jogar();
